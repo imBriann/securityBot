@@ -34,14 +34,14 @@ if not all([VERIFY_TOKEN, ACCESS_TOKEN, PHONE_NUMBER_ID, DEEPSEEK_API_KEY]):
 
 if os.name == "nt": 
     tesseract_path = os.getenv("TESSERACT_CMD_PATH", r"C:\Program Files\Tesseract-OCR\tesseract.exe")
-    if os.path.exists(tesseract_path):
-        pytesseract.pytesseract.tesseract_cmd = tesseract_path
-    else:
-        print(f"ADVERTENCIA: Tesseract OCR no encontrado en {tesseract_path}.")
-else: 
-    tesseract_path = os.getenv("TESSERACT_CMD_PATH")
-    if tesseract_path and os.path.exists(tesseract_path):
-         pytesseract.pytesseract.tesseract_cmd = tesseract_path
+else:
+    tesseract_path = "/usr/bin/tesseract"
+
+if os.path.exists(tesseract_path):
+    pytesseract.pytesseract.tesseract_cmd = tesseract_path
+else:
+    print(f"ADVERTENCIA: Tesseract OCR no encontrado en {tesseract_path}.")
+
 
 http_client: httpx.AsyncClient = None
 
