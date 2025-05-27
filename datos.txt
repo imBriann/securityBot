@@ -1,0 +1,20 @@
+7JS2Z18EM7R4ES2SXFSZTVK5 - twilio
+
+from twilio.rest import Client
+
+account_sid = 'AC5649659fc69cb9b5418fd766082d51cd'
+auth_token = 'a960e9c2fa6ddaa215afa836756ccb5f'
+client = Client(account_sid, auth_token)
+
+message = client.messages.create(
+  from_='whatsapp:+14155238886',
+  content_sid='HXb5b62575e6e4ff6129ad7c8efe1f983e',
+  content_variables='{"1":"12/1","2":"3pm"}',
+  to='whatsapp:+573505894033'
+)
+
+print(message.sid)
+
+EAAIUbXSn5WcBO8PZAXbnab3l7ELqiHZBekK2EMnp5e6Em6MXgat92DkNd2QmbY3GAoKHi8EBEqjzoyuRTl15ViXTcewgFIqmhfgVfUyW5Btu1Gr6cGP6NdjndmBaFrHXKoPZBlIoh9tdQO6GiQ1D1RF4I7uv7c39ls4CwPMboyq43tMzn46ZCtY25C76mEZClIt4ZD
+
+{"url":"https:\/\/lookaside.fbsbx.com\/whatsapp_business\/attachments\/?mid=1042247794637553&ext=1748053261&hash=ATsTEcB7cMn3dYWcIQHNLDSgyB1MxV9iNFXfqt1IU0hl2Q","mime_type":"image\/jpeg","sha256":"e331c553159d25bac872fffad8cd7c3d0e389a25cad69dd0c2b43ff1c1fc4c47","file_size":566182,"id":"1042247794637553","messaging_product":"whatsapp"}
