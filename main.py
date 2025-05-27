@@ -42,7 +42,6 @@ if os.path.exists(tesseract_path):
 else:
     print(f"ADVERTENCIA: Tesseract OCR no encontrado en {tesseract_path}.")
 
-
 http_client: httpx.AsyncClient = None
 
 @asynccontextmanager
