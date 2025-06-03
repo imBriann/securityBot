@@ -86,11 +86,11 @@ def setup_database():
         acepto_terminos INTEGER DEFAULT 0,
         estado INTEGER DEFAULT 0,
         mensajes_enviados INTEGER DEFAULT 0,
-        last_analysis_details TEXT,        -- Para guardar los detalles completos del último análisis
-        last_image_ocr_text TEXT,          -- Para guardar el texto OCR de la última imagen
-        last_image_analysis_raw TEXT,      -- Para guardar el análisis RAW completo de la última imagen
-        last_image_id_processed TEXT,      -- El nombre de archivo de la última imagen
-        last_image_timestamp DATETIME      -- Timestamp de cuándo se procesó la última imagen
+        last_analysis_details TEXT,
+        last_image_ocr_text TEXT,
+        last_image_analysis_raw TEXT,
+        last_image_id_processed TEXT,
+        last_image_timestamp DATETIME
     );
     """)
     cursor_setup.execute("""
@@ -129,15 +129,36 @@ def db_create_user(telefono: str):
 
 def db_update_user(telefono: str, data: dict):
     if not data:
-        return 
+        print(f"DEBUG: db_update_user llamado para {telefono} sin datos. Retornando.")  # NEW LOG
+        return
+
     fields = ", ".join([f"{key} = ?" for key in data])
     values = list(data.values())
     values.append(telefono)
-    conn_db = get_db_connection()
-    cursor_db = conn_db.cursor()
-    cursor_db.execute(f"UPDATE usuarios SET {fields} WHERE telefono = ?", tuple(values))
-    conn_db.commit()
-    conn_db.close()
+
+    conn_db = None  # Define outside try to ensure closure in finally
+    try:
+        conn_db = get_db_connection()
+        cursor_db = conn_db.cursor()
+        query = f"UPDATE usuarios SET {fields} WHERE telefono = ?"  # NEW LOG
+        print(f"DEBUG: Ejecutando SQL: {query} con valores (excepto el último que es el teléfono): {tuple(values[:-1])} para tel: {telefono}")  # NEW LOG
+        cursor_db.execute(query, tuple(values))
+        conn_db.commit()
+        print(f"DEBUG: Commit exitoso para {telefono}.")  # NEW LOG
+    except sqlite3.Error as e_sqlite:  # Capture SQLite-specific errors
+        print(f"ERROR SQLITE en db_update_user para {telefono}: {e_sqlite}. Query: {query}, Values: {tuple(values)}")  # NEW LOG
+        if conn_db:
+            conn_db.rollback()  # Rollback changes on error
+        raise  # Re-raise to propagate error
+    except Exception as e_general:  # Capture other possible errors
+        print(f"ERROR GENERAL en db_update_user para {telefono}: {e_general}. Query: {query}, Values: {tuple(values)}")  # NEW LOG
+        if conn_db:
+            conn_db.rollback()
+        raise
+    finally:
+        if conn_db:
+            conn_db.close()
+            print(f"DEBUG: Conexión DB cerrada para {telefono} en db_update_user.")  # NEW LOG
 
 def db_save_image_record(telefono_usuario: str, nombre_archivo_imagen: str):
     conn_db = get_db_connection()
@@ -502,7 +523,13 @@ async def handle_registered_user_message(telefono: str, text_received: str, user
                 db_updates["last_image_id_processed"] = image_context.get("image_db_id")
                 db_updates["last_image_timestamp"] = datetime.datetime.now().isoformat()
 
-            db_update_user(telefono, db_updates)
+            print(f"DEBUG: Intentando actualizar DB para {telefono} con los siguientes datos: {db_updates}")  # NEW LOG
+            try:
+                db_update_user(telefono, db_updates)
+                print(f"DEBUG: Actualización de DB para {telefono} parece exitosa.")  # NEW LOG
+            except Exception as e_db:
+                print(f"ERROR CRÍTICO: Falló db_update_user para {telefono}. Datos: {db_updates}. Error: {e_db}")  # NEW LOG
+                raise  # Re-raise to propagate error
         else:
             await send_whatsapp_message(telefono, f"Lo siento mucho, {nombre_usuario}, tuve un problema al intentar analizar tu mensaje. ¿Podrías intentarlo de nuevo un poco más tarde, por favor? 🙏")
     elif intencion == "saludo":
