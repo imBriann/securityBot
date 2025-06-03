@@ -526,14 +526,13 @@ async def whatsapp_webhook_handler(request: Request):
         telefono_remitente = message_object.get("from")
         message_type = message_object.get("type")
         whatsapp_message_id = message_object.get("id")
-
-        if not telefono_remitente or not whatsapp_message_id:
-            print(f"Webhook ignorado: falta telefono_remitente o whatsapp_message_id. Tel: {telefono_remitente}, MsgID: {whatsapp_message_id}")
-            return JSONResponse(content={}, status_code=200)
+        print(f"DEBUG: Received message with ID: {whatsapp_message_id} from {telefono_remitente}")
 
         if whatsapp_message_id in processed_message_ids:
-            print(f"Webhook duplicado ignorado para message_id: {whatsapp_message_id}")
+            print(f"DEBUG: Duplicate webhook ignored for message_id: {whatsapp_message_id}")
             return JSONResponse(content={}, status_code=200)
+
+        print(f"DEBUG: New message ID: {whatsapp_message_id}. Adding to processed_message_ids.")
         processed_message_ids.append(whatsapp_message_id) 
         
     except (KeyError, IndexError, TypeError) as e: 
