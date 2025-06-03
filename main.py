@@ -4,7 +4,7 @@ import asyncio
 import httpx
 import uuid
 import re
-import datetime # <--- ASEGÚRATE DE ESTA LÍNEA
+import datetime
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
@@ -29,7 +29,7 @@ ESTADO_PENDIENTE_EDAD = 2
 ESTADO_PENDIENTE_CONOCIMIENTO = 3
 ESTADO_REGISTRADO = 4
 ESTADO_ESPERANDO_RESPUESTA_PHISHING = 5
-ESTADO_ESPERANDO_MAS_DETALLES = 6 # Nuevo estado
+ESTADO_ESPERANDO_MAS_DETALLES = 6
 
 if not all([VERIFY_TOKEN, ACCESS_TOKEN, PHONE_NUMBER_ID, DEEPSEEK_API_KEY]):
     print("ERROR CRÍTICO: Una o más variables de entorno no están configuradas.")
@@ -136,11 +136,10 @@ def db_update_user(telefono: str, data: dict):
     values.append(telefono)
 
     conn_db = None
-    query = f"UPDATE usuarios SET {fields} WHERE telefono = ?" # Definir query aquí para logging en caso de error temprano
+    query = f"UPDATE usuarios SET {fields} WHERE telefono = ?"
     try:
         conn_db = get_db_connection()
         cursor_db = conn_db.cursor()
-        # Cuidado con datos sensibles en logs de producción
         print(f"DEBUG: Ejecutando SQL: {query} con valores (excepto el último que es el teléfono): {tuple(values[:-1])} para tel: {telefono}")
         cursor_db.execute(query, tuple(values))
         conn_db.commit()
@@ -160,7 +159,6 @@ def db_update_user(telefono: str, data: dict):
             conn_db.close()
             print(f"DEBUG: Conexión DB cerrada para {telefono} en db_update_user.")
 
-
 def db_save_image_record(telefono_usuario: str, nombre_archivo_imagen: str):
     conn_db = get_db_connection()
     cursor_db = conn_db.cursor()
@@ -173,6 +171,7 @@ def db_save_image_record(telefono_usuario: str, nombre_archivo_imagen: str):
 
 async def send_whatsapp_message(to: str, text: str):
     global http_client
+    # ... (resto de la función sin cambios)
     if not http_client:
         print("Error: El cliente HTTP no está inicializado.")
         return
@@ -195,8 +194,10 @@ async def send_whatsapp_message(to: str, text: str):
     except Exception as e:
         print(f"Error inesperado en send_whatsapp_message ({to}): {e}")
 
+
 async def analyze_with_deepseek(message_text: str, mode: str, user_profile: dict = None) -> str | None:
     global http_client
+    # ... (inicio de la función sin cambios)
     if not http_client:
         print("Error: El cliente HTTP no está inicializado.")
         return "Lo siento, el servicio de análisis no está disponible en este momento (cliente no listo)."
@@ -251,29 +252,27 @@ async def analyze_with_deepseek(message_text: str, mode: str, user_profile: dict
                 "- saludo: si el mensaje es un saludo o una interacción social simple (ej: hola, buenos días, ¿cómo estás?, gracias, ok).\n"
                 "- analizar: si el usuario quiere que analices un mensaje de texto, el contenido de una imagen, o cualquier cosa que le parezca sospechosa de ser una estafa, phishing, fraude, o que contenga información engañosa. Esto incluye mensajes que el usuario podría haber copiado y pegado, incluso si no lo pide explícitamente pero el contenido del mensaje sugiere que es para revisión.\n"
                 "- pregunta: si el usuario está haciendo una pregunta específica sobre ciberseguridad, cómo protegerse, qué es un tipo de estafa, etc. (que no sea simplemente reenviar un mensaje para analizar).\n"
-                # "- consulta_imagen_anterior: si el usuario pregunta específicamente sobre una imagen analizada más recientemente (ej: '¿qué decía la foto que te mandé?', 'dame más detalles de la última imagen', '¿la imagen de antes era peligrosa?').\n" # Considerar añadir esto para Parte 2 de mejoras
                 "- irrelevante: si el mensaje no tiene relación con los temas anteriores (ej: preguntas sobre el clima, deportes, chistes no relacionados, etc.).\n\n"
                 "Prioriza 'analizar' si el texto del mensaje parece ser el contenido de un mensaje sospechoso que el usuario quiere verificar, incluso si no lo pide explícitamente."
             ),
             "user": message_text
         },
-        "phishing": { # MODIFICADO
+        "phishing": { # (sin cambios respecto a la v3)
             "system": (
                 f"Eres SecurityBot-WA, un asistente de seguridad digital en Colombia, muy AMABLE, EMPÁTICO y CLARO. Te diriges al usuario {user_name_for_prompt}.\n"
                 f"Tu misión es revisar el siguiente mensaje y determinar si parece una estafa digital (phishing, smishing, etc.). Luego, crea una respuesta adaptada al perfil del usuario.\n\n"
                 f"PERFIL DEL USUARIO ACTUAL: Nombre: {user_name_for_prompt}, Edad: {user_profile.get('edad', 'Desconocida')}, Nivel de conocimiento en ciberseguridad: {user_profile.get('conocimiento', 'Desconocido')}.\n\n"
-                "INSTRUCCIONES DE TONO Y LENGUAJE:\n" # ... (sin cambios)
+                "INSTRUCCIONES DE TONO Y LENGUAJE:\n"
                 f"- Siempre dirígete al usuario por su nombre ({user_name_for_prompt}) de forma natural al inicio o cuando sea apropiado.\n"
                 "- Usa un tono cálido, paciente y tranquilizador. Muchos usuarios pueden estar preocupados o no entender bien estos temas.\n"
                 "- Utiliza emojis con moderación para añadir claridad y amabilidad (ej: ✅, ⚠️, 🤔, 🛡️, 👍, 😊).\n"
                 f"- Si {user_name_for_prompt} es un adulto mayor (60+ años) o su conocimiento es 'No': Explica las cosas como si hablaras con un familiar querido, con mucha paciencia. Usa frases cortas, lenguaje MUY sencillo, ejemplos cotidianos. Evita TOTALMENTE la jerga técnica. Sé muy paso a paso.\n"
                 f"- Si el conocimiento de {user_name_for_prompt} es 'Poco': Usa un lenguaje claro, intermedio, con ejemplos sencillos. Evita tecnicismos innecesarios.\n"
                 f"- Si el conocimiento de {user_name_for_prompt} es 'Sí': Puedes ser un poco más directo y usar algún término técnico si es relevante, pero siempre prioriza la claridad y un tono amable y respetuoso.\n\n"
-
                 "**NOTA ESPECIAL SOBRE TEXTO DE IMÁGENES (OCR)**: El mensaje que vas a analizar podría provenir de una imagen y haber sido transcrito por un sistema OCR. Esto significa que PUEDE CONTENER ERRORES, letras o palabras extrañas, o texto mal formado. Por favor, TEN MUCHA PACIENCIA con estos errores e INTENTA INTERPRETAR LA INTENCIÓN Y EL CONTENIDO PRINCIPAL del texto original a pesar de las posibles imperfecciones de la transcripción antes de realizar tu análisis de seguridad. No te enfoques en los errores de OCR, sino en el mensaje subyacente que {user_name_for_prompt} quiso compartir.\n\n"
                 "INSTRUCCIONES PARA LA RESPUESTA:\n"
                 "Tu respuesta DEBE estar estructurada en dos partes, separadas por la cadena '---DETALLES_SIGUEN---'.\n"
-                "PARTE 1 (Resumen Breve): Antes del separador '---DETALLES_SIGUEN---', proporciona un resumen MUY BREVE y directo (1-2 frases) sobre el mensaje analizado. Indica el riesgo principal (ej: '*Resumen Breve*:\\n{user_name_for_prompt}, este mensaje parece una estafa de tipo suplantación de identidad.' o '*Resumen Breve*:\\n{user_name_for_prompt}, en principio, este mensaje no parece ser una estafa.'). NO DES NINGUNA EXPLICACIÓN DETALLADA AQUÍ. Finaliza OBLIGATORIAMENTE esta primera parte con la frase: '⚠️ Si quieres el análisis completo y mis recomendaciones, responde SÍ_DETALLES.'\n"
+                "PARTE 1 (Resumen Breve): Antes del separador '---DETALLES_SIGUEN---', proporciona un resumen MUY BREVE y directo (1-2 frases) sobre el mensaje analizado. Indica el riesgo principal (ej: '*Resumen Breve*:\\n{user_name_for_prompt}, este mensaje parece una estafa de tipo suplantación de identidad.' o '*Resumen Breve*:\\n{user_name_for_prompt}, en principio, este mensaje no parece ser una estafa.'). NO DES NINGUNA EXPLICACIÓN DETALLADA AQUÍ. El bot preguntará al usuario si desea más detalles después de este resumen.\n"
                 "PARTE 2 (Análisis Completo): Después del separador '---DETALLES_SIGUEN---', incluye el análisis completo y detallado, manteniendo la siguiente estructura OBLIGATORIA:\n"
                 "🔍 *Análisis del mensaje recibido*\n"
                 "✅ *Resultado*: (Sí, parece una estafa / No, no parece una estafa / No estoy seguro, pero te doy recomendaciones)\n"
@@ -287,6 +286,33 @@ async def analyze_with_deepseek(message_text: str, mode: str, user_profile: dict
                 "- No uses saludos genéricos como 'Hola'. Ya te estás dirigiendo a {user_name_for_prompt}."
             ),
             "user": f"Por favor, {user_name_for_prompt} me envió este mensaje para analizarlo: \"{message_text}\""
+        },
+        "decision_ver_detalles": { # (sin cambios respecto a la v3)
+            "system": (
+                "Eres un clasificador de intenciones para un chatbot de WhatsApp. El bot acaba de dar un resumen de un análisis de seguridad (phishing/estafa) y preguntó al usuario si quiere ver los detalles completos.\n"
+                "El usuario ha respondido. Tu tarea es determinar si la respuesta del usuario significa que SÍ quiere ver los detalles, o si está diciendo OTRA COSA (una nueva pregunta, un comentario no relacionado, etc.).\n"
+                "Considera que el usuario podría ser una persona mayor, así que sé flexible con respuestas afirmativas.\n\n"
+                "Responde SOLO con una de estas dos opciones:\n"
+                "- QUIERE_DETALLES: Si el usuario expresa afirmativamente que quiere ver los detalles. Ejemplos: \"Sí\", \"Claro\", \"Bueno\", \"Ok\", \"Mándamelos\", \"Más información por favor\", \"Sí quiero los detalles\", \"Dale\", \"Más\", \"Bueno sí\", \"A ver\", \"Quiero saber más\", \"Explícame\", \"Sí, por favor\".\n"
+                "- OTRA_COSA: Si la respuesta del usuario NO es una clara afirmación para ver los detalles. Ejemplos: \"¿Y eso es peligroso?\", \"No gracias\", \"Qué es phishing?\", \"Entendido\", \"Ok gracias\", \"Y si ya abrí el enlace?\", o cualquier otra pregunta o comentario.\n\n"
+                "No expliques nada más. Solo QUIERE_DETALLES u OTRA_COSA."
+            ),
+            "user": message_text
+        },
+        "decision_post_phishing_interaction": { # NUEVO PROMPT
+            "system": (
+                f"Eres un clasificador de intenciones para un chatbot de WhatsApp llamado SecurityBot-WA. El bot acaba de determinar que un mensaje era una estafa y le preguntó al usuario ({user_name_for_prompt}) si interactuó con ella (SÍ/NO) o si necesita AYUDA.\n"
+                "El usuario ha respondido. Tu tarea es clasificar esta respuesta.\n\n"
+                "Responde SOLO con una de estas opciones:\n"
+                "- RESPUESTA_SI: Si el usuario indica afirmativamente que SÍ interactuó con la estafa (ej: \"Sí\", \"Sí hice clic\", \"Creo que sí\").\n"
+                "- RESPUESTA_NO: Si el usuario indica que NO interactuó con la estafa (ej: \"No\", \"No, para nada\", \"No hice nada\").\n"
+                "- PIDE_AYUDA: Si el usuario explícitamente pide ayuda o usa la palabra \"AYUDA\".\n"
+                "- ES_PREGUNTA: Si el usuario hace una pregunta en lugar de responder directamente SÍ/NO/AYUDA (ej: \"¿Qué es phishing?\", \"¿Cómo puedo evitar esto?\", \"¿Y si ya di mis datos?\").\n"
+                "- ES_COMENTARIO: Si el usuario hace un comentario, agradece, o da una respuesta corta que no es SÍ/NO/AYUDA ni una pregunta clara (ej: \"Gracias\", \"Ok\", \"Entendido\", \"Qué peligroso\", \"Es una estafa\").\n"
+                "- OTRA_COSA: Si la respuesta es muy ambigua, no relacionada, o no encaja en las categorías anteriores.\n\n"
+                "No expliques nada más. Solo una de las opciones listadas."
+            ),
+            "user": message_text # La respuesta del usuario
         },
         "ayuda_post_estafa": { # ... (sin cambios)
             "system": (
@@ -332,6 +358,7 @@ async def analyze_with_deepseek(message_text: str, mode: str, user_profile: dict
             "user": f"{user_name_for_prompt} tiene la siguiente pregunta sobre ciberseguridad: \"{message_text}\""
         }
     }
+    # ... (resto de la función analyze_with_deepseek sin cambios)
     if mode not in prompts_config:
         print(f"Modo de análisis no reconocido: {mode}")
         return "Error interno: modo de análisis no válido."
@@ -354,7 +381,8 @@ async def analyze_with_deepseek(message_text: str, mode: str, user_profile: dict
     except httpx.RequestError as e: print(f"Error de red con DeepSeek API ({mode}): {e}"); return "Problema de conexión con el servicio de análisis."
     except Exception as e: print(f"Error inesperado en analyze_with_deepseek ({mode}): {e}"); return "Lo siento, ocurrió un error inesperado."
 
-async def download_image_from_whatsapp(media_id: str) -> bytes | None: # (sin cambios)
+# ... (download_image_from_whatsapp - sin cambios)
+async def download_image_from_whatsapp(media_id: str) -> bytes | None:
     global http_client
     if not http_client: print("Error: El cliente HTTP no está inicializado."); return None
     if not ACCESS_TOKEN: print("Error: ACCESS_TOKEN no configurado."); return None
@@ -373,7 +401,8 @@ async def download_image_from_whatsapp(media_id: str) -> bytes | None: # (sin ca
     except Exception as e: print(f"Error inesperado en download_image_from_whatsapp (media_id: {media_id}): {e}")
     return None
 
-async def process_incoming_image_task(telefono: str, user_data: sqlite3.Row, image_id_whatsapp: str): # MODIFICADO
+# ... (process_incoming_image_task - sin cambios)
+async def process_incoming_image_task(telefono: str, user_data: sqlite3.Row, image_id_whatsapp: str):
     user_name_for_ocr_task = user_data["nombre"] if user_data and user_data["nombre"] else "tú"
     print(f"Iniciando tarea de procesamiento de imagen para {telefono} ({user_name_for_ocr_task}), image_id_whatsapp: {image_id_whatsapp}")
 
@@ -382,7 +411,7 @@ async def process_incoming_image_task(telefono: str, user_data: sqlite3.Row, ima
         await send_whatsapp_message(telefono, f"⚠️ Lo siento, {user_name_for_ocr_task}, no pude descargar la imagen que enviaste. ¿Podrías intentar enviarla de nuevo o verificar que sea válida? Por favor.")
         return
 
-    image_file_name_for_db = f"{telefono}_{uuid.uuid4().hex[:8]}.jpg" # Usado para guardar y como ID en DB
+    image_file_name_for_db = f"{telefono}_{uuid.uuid4().hex[:8]}.jpg"
     try:
         image_path = os.path.join(IMAGES_DIR, image_file_name_for_db)
 
@@ -393,9 +422,6 @@ async def process_incoming_image_task(telefono: str, user_data: sqlite3.Row, ima
 
         text_ocr = await asyncio.to_thread(save_and_ocr_sync, image_path, image_bytes)
         
-        # Si aún usas la tabla 'imagenes_procesadas' separada:
-        # db_save_image_record(telefono, image_file_name_for_db)
-
         if not text_ocr:
             await send_whatsapp_message(telefono, f"🤔 {user_name_for_ocr_task}, no pude encontrar texto legible en la imagen. Para que pueda ayudarte mejor, asegúrate de que la imagen sea clara y el texto no sea muy pequeño o esté borroso. ¡Gracias!")
             return
@@ -405,7 +431,7 @@ async def process_incoming_image_task(telefono: str, user_data: sqlite3.Row, ima
         image_context_for_handler = {
             "is_from_image_processing": True,
             "ocr_text_original": text_ocr,
-            "image_db_id": image_file_name_for_db # Pasa el nombre de archivo que se usará como ID
+            "image_db_id": image_file_name_for_db
         }
         await handle_registered_user_message(telefono, text_for_analysis, user_data, image_context=image_context_for_handler)
         
@@ -418,8 +444,8 @@ async def process_incoming_image_task(telefono: str, user_data: sqlite3.Row, ima
         print(f"ERROR en process_incoming_image_task (tel: {telefono}, user: {user_name_for_ocr_task}, img_id_wa: {image_id_whatsapp}): {e}")
         await send_whatsapp_message(telefono, f"⚠️ Lo siento mucho, {user_name_for_ocr_task}, ocurrió un error inesperado mientras procesaba tu imagen. Ya estoy enterado del problema. Por favor, intenta más tarde. 🙏")
 
-
-async def handle_onboarding_process(telefono: str, text_received: str, user_data: sqlite3.Row): # (sin cambios)
+# ... (handle_onboarding_process - sin cambios)
+async def handle_onboarding_process(telefono: str, text_received: str, user_data: sqlite3.Row):
     estado_actual = user_data["estado"]
     user_name_onboarding = user_data["nombre"] if user_data and user_data["nombre"] else "amigo/a"
 
@@ -469,12 +495,19 @@ async def handle_onboarding_process(telefono: str, text_received: str, user_data
             await send_whatsapp_message(telefono, f"⚠️ Ups, {user_name_final_step}. No entendí bien tu respuesta sobre tu conocimiento. Para que pueda ayudarte mejor, ¿podrías decirme si sabes *Sí*, *Poco*, o *No* sobre ciberseguridad? ¡Una de esas tres opciones me ayuda mucho! 👍")
 
 
-async def handle_post_phishing_response(telefono: str, text_received: str, user_data: sqlite3.Row): # (sin cambios)
+async def handle_post_phishing_response(telefono: str, text_received: str, user_data: sqlite3.Row): # MODIFICADO
     user_profile_dict = dict(user_data)
     nombre_usuario = user_data["nombre"] if user_data and user_data["nombre"] else "tú"
-    cleaned_text_upper = re.sub(r'\s+', ' ', text_received).strip().upper()
+    
+    # Usar IA para clasificar la respuesta del usuario
+    decision_usuario = await analyze_with_deepseek(text_received, "decision_post_phishing_interaction", user_profile_dict)
+    print(f"DEBUG: Decisión IA en handle_post_phishing_response ({telefono}): {decision_usuario} para texto: '{text_received}'")
 
-    if cleaned_text_upper == "SÍ" or cleaned_text_upper == "SI":
+    re_prompt_message = f"Entendido, {nombre_usuario}. Volviendo a mi pregunta anterior, ¿llegaste a interactuar con el mensaje sospechoso (responde SÍ o NO) o necesitas los pasos de AYUDA específica? 🤔"
+    re_prompt_message_short = f"De acuerdo, {nombre_usuario}. Sobre el mensaje que analizamos: ¿interactuaste (SÍ/NO) o necesitas AYUDA?"
+
+
+    if decision_usuario == "RESPUESTA_SI":
         await send_whatsapp_message(telefono, f"🆘 Entendido, {nombre_usuario}. No te preocupes, vamos a ver qué pasos puedes seguir. Dame un momento para prepararte la información... 🛡️")
         respuesta_ayuda = await analyze_with_deepseek( "El usuario indicó que SÍ interactuó con la estafa.", "ayuda_post_estafa", user_profile_dict)
         if respuesta_ayuda:
@@ -483,11 +516,11 @@ async def handle_post_phishing_response(telefono: str, text_received: str, user_
             await send_whatsapp_message(telefono, f"Lo lamento, {nombre_usuario}, tuve dificultades para generar los pasos de ayuda en este momento. Si es urgente, te recomiendo contactar directamente a las autoridades o a un experto en seguridad. 🙏")
         db_update_user(telefono, {"estado": ESTADO_REGISTRADO})
 
-    elif cleaned_text_upper == "NO":
+    elif decision_usuario == "RESPUESTA_NO":
         await send_whatsapp_message(telefono, f"¡Excelente noticia, {nombre_usuario}! 👍 Me alegra mucho que no hayas interactuado con ese mensaje sospechoso. ¡Eso demuestra que estás muy alerta! Sigue así, desconfiando y verificando siempre. Si tienes algo más que quieras analizar o alguna otra pregunta, no dudes en decírmelo. 😊")
         db_update_user(telefono, {"estado": ESTADO_REGISTRADO})
 
-    elif cleaned_text_upper == "AYUDA":
+    elif decision_usuario == "PIDE_AYUDA":
         await send_whatsapp_message(telefono, f"🆘 De acuerdo, {nombre_usuario}. Te prepararé los pasos de ayuda específicos. Un momento, por favor... 🛡️")
         respuesta_ayuda = await analyze_with_deepseek("El usuario escribió AYUDA tras un análisis de estafa.", "ayuda_post_estafa", user_profile_dict)
         if respuesta_ayuda:
@@ -495,21 +528,45 @@ async def handle_post_phishing_response(telefono: str, text_received: str, user_
         else:
             await send_whatsapp_message(telefono, f"Lo lamento, {nombre_usuario}, tuve dificultades para generar los pasos de ayuda en este momento. Si es urgente, te recomiendo contactar directamente a las autoridades o a un experto en seguridad. 🙏")
         db_update_user(telefono, {"estado": ESTADO_REGISTRADO})
-    else:
+
+    elif decision_usuario == "ES_PREGUNTA":
+        print(f"DEBUG: Usuario {telefono} hizo una pregunta en estado ESPERANDO_RESPUESTA_PHISHING: '{text_received}'")
+        await send_whatsapp_message(telefono, f"🤔 ¡Claro, {nombre_usuario}! Déjame responder tu pregunta sobre \"{text_received[:30]}...\". Un momento...")
+        respuesta_a_pregunta = await analyze_with_deepseek(text_received, "cyber_pregunta", user_profile_dict)
+        if respuesta_a_pregunta:
+            await send_whatsapp_message(telefono, respuesta_a_pregunta)
+            await send_whatsapp_message(telefono, re_prompt_message_short)
+        else:
+            await send_whatsapp_message(telefono, f"Mis disculpas, {nombre_usuario}, no pude procesar tu pregunta en este momento. {re_prompt_message_short}")
+        # El estado sigue siendo ESTADO_ESPERANDO_RESPUESTA_PHISHING
+
+    elif decision_usuario == "ES_COMENTARIO":
+        print(f"DEBUG: Usuario {telefono} hizo un comentario en estado ESPERANDO_RESPUESTA_PHISHING: '{text_received}'")
+        # Podríamos tener respuestas más específicas para "gracias", "ok", etc.
+        if "gracias" in text_received.lower():
+            await send_whatsapp_message(telefono, f"¡De nada, {nombre_usuario}! 😊 {re_prompt_message_short}")
+        elif "ok" in text_received.lower() or "entendido" in text_received.lower():
+            await send_whatsapp_message(telefono, f"Entendido, {nombre_usuario}. {re_prompt_message_short}")
+        else:
+            await send_whatsapp_message(telefono, f"Ok, {nombre_usuario}. {re_prompt_message_short}")
+        # El estado sigue siendo ESTADO_ESPERANDO_RESPUESTA_PHISHING
+        
+    else: # OTRA_COSA o error de IA
+        print(f"DEBUG: Respuesta no clasificada ({decision_usuario}) en ESPERANDO_RESPUESTA_PHISHING para {telefono}. Texto: '{text_received}'")
         await send_whatsapp_message(telefono, f"🤔 {nombre_usuario}, no estoy seguro de haber entendido tu respuesta. A mi pregunta anterior sobre si interactuaste con el mensaje, por favor responde con *SÍ*, *NO*, o escribe *AYUDA* si necesitas los pasos a seguir. ¡Gracias!")
-        # Mantenemos el estado ESTADO_ESPERANDO_RESPUESTA_PHISHING
+        # El estado sigue siendo ESTADO_ESPERANDO_RESPUESTA_PHISHING
 
-
-async def handle_registered_user_message(telefono: str, text_received: str, user_data: sqlite3.Row, image_context: dict = None): # MODIFICADO
+# ... (handle_registered_user_message - sin cambios respecto a la v3)
+async def handle_registered_user_message(telefono: str, text_received: str, user_data: sqlite3.Row, image_context: dict = None):
     cleaned_text = re.sub(r'\s+', ' ', text_received).strip()
+    nombre_usuario = user_data["nombre"] if user_data and user_data["nombre"] else "tú" 
+
     if not cleaned_text:
-        user_name_empty_msg = user_data["nombre"] if user_data and user_data["nombre"] else "Hola"
-        await send_whatsapp_message(telefono, f"🤔 {user_name_empty_msg}, parece que me enviaste un mensaje vacío. ¿Necesitas ayuda con algo?")
+        await send_whatsapp_message(telefono, f"🤔 {nombre_usuario}, parece que me enviaste un mensaje vacío. ¿Necesitas ayuda con algo?")
         return
 
     user_profile_dict = dict(user_data)
     intencion = await analyze_with_deepseek(cleaned_text, "intencion", user_profile_dict)
-    nombre_usuario = user_data["nombre"] if user_data and user_data["nombre"] else "tú"
 
     if intencion == "saludo":
         await send_whatsapp_message(telefono, f"¡Hola de nuevo, {nombre_usuario}! 👋 Qué bueno saber de ti. ¿En qué te puedo ayudar hoy? 😊")
@@ -522,7 +579,8 @@ async def handle_registered_user_message(telefono: str, text_received: str, user
             resumen_breve = partes[0].strip()
             detalles_completos = partes[1].strip() if len(partes) > 1 else ""
 
-            await send_whatsapp_message(telefono, resumen_breve) # Envía el resumen breve
+            await send_whatsapp_message(telefono, resumen_breve)
+            await send_whatsapp_message(telefono, f"{nombre_usuario}, ¿quieres que te dé más detalles y mis recomendaciones sobre esto? 😊") 
 
             db_updates = {
                 "estado": ESTADO_ESPERANDO_MAS_DETALLES,
@@ -530,9 +588,9 @@ async def handle_registered_user_message(telefono: str, text_received: str, user
             }
             if image_context and image_context.get("is_from_image_processing"):
                 db_updates["last_image_ocr_text"] = image_context.get("ocr_text_original")
-                db_updates["last_image_analysis_raw"] = analisis_phishing_completo # Guardamos todo para futuro contexto
+                db_updates["last_image_analysis_raw"] = analisis_phishing_completo
                 db_updates["last_image_id_processed"] = image_context.get("image_db_id")
-                db_updates["last_image_timestamp"] = datetime.now().isoformat()
+                db_updates["last_image_timestamp"] = datetime.datetime.now().isoformat()
             
             print(f"DEBUG: Intentando actualizar DB para {telefono} con los siguientes datos: {db_updates}")
             try:
@@ -540,8 +598,7 @@ async def handle_registered_user_message(telefono: str, text_received: str, user
                 print(f"DEBUG: Actualización de DB para {telefono} (estado a ESPERANDO_MAS_DETALLES) parece exitosa.")
             except Exception as e_db_update:
                 print(f"ERROR CRÍTICO: Falló db_update_user tras enviar resumen para {telefono}. Datos: {db_updates}. Error: {e_db_update}")
-                # El error se propagará a process_incoming_image_task si se llamó desde allí
-                raise e_db_update # Importante para que la tarea de imagen sepa que falló aquí
+                raise e_db_update
         else:
             await send_whatsapp_message(telefono, f"Lo siento mucho, {nombre_usuario}, tuve un problema al intentar analizar tu mensaje. ¿Podrías intentarlo de nuevo un poco más tarde, por favor? 🙏")
 
@@ -551,18 +608,14 @@ async def handle_registered_user_message(telefono: str, text_received: str, user
         if respuesta_pregunta: await send_whatsapp_message(telefono, respuesta_pregunta)
         else: await send_whatsapp_message(telefono, f"Mis disculpas, {nombre_usuario}. Parece que tuve un inconveniente al procesar tu pregunta. ¿Podrías intentar reformularla o consultarme de nuevo en un momento? Gracias por tu paciencia. 😊")
     
-    # Aquí podrías añadir lógica para "consulta_imagen_anterior" si la implementas
-    # elif intencion == "consulta_imagen_anterior":
-    #    # ... lógica para recuperar y mostrar info de last_image_analysis_raw ...
-
     elif intencion == "irrelevante":
         await send_whatsapp_message(telefono, f"Hmm, {nombre_usuario}, parece que tu mensaje no está directamente relacionado con temas de ciberseguridad o análisis de fraudes. 🤔 Recuerda que mi especialidad es ayudarte a identificar mensajes o imágenes sospechosas y responder tus dudas sobre seguridad digital. ¡Si tienes algo de eso, no dudes en enviármelo! 👍")
     else:
         print(f"Intención no reconocida o error de IA para '{cleaned_text[:50]}...' de {nombre_usuario}: {intencion}")
         await send_whatsapp_message(telefono, f"Vaya, {nombre_usuario}, no estoy completamente seguro de cómo ayudarte con eso. 🧐 ¿Podrías intentar expresarlo de otra manera o enviarme un mensaje sospechoso para que lo analice? Estoy aquí para los temas de ciberseguridad. 😊")
 
-
-@app.get("/webhook", response_class=PlainTextResponse) # (sin cambios)
+# ... (verify_webhook_subscription - sin cambios)
+@app.get("/webhook", response_class=PlainTextResponse)
 async def verify_webhook_subscription(request: Request):
     if request.query_params.get("hub.mode") == "subscribe" and \
        request.query_params.get("hub.verify_token") == VERIFY_TOKEN:
@@ -571,7 +624,8 @@ async def verify_webhook_subscription(request: Request):
     print(f"Fallo en verificación de Webhook. Token: {request.query_params.get('hub.verify_token')}")
     raise HTTPException(status_code=403, detail="Verification token mismatch.")
 
-@app.post("/webhook") # MODIFICADO para nuevo estado
+# ... (whatsapp_webhook_handler - sin cambios respecto a la v3, ya que la lógica nueva está en handle_post_phishing_response)
+@app.post("/webhook")
 async def whatsapp_webhook_handler(request: Request):
     data = await request.json()
     try:
@@ -585,8 +639,12 @@ async def whatsapp_webhook_handler(request: Request):
         telefono_remitente = message_object.get("from")
         message_type = message_object.get("type")
         whatsapp_message_id = message_object.get("id")
+        text_recibido_original = "" 
+        if message_type == "text":
+            text_recibido_original = message_object.get("text", {}).get("body", "").strip()
 
-        print(f"DEBUG: Webhook IN: Tel: {telefono_remitente}, MsgID: {whatsapp_message_id}, Type: {message_type}")
+
+        print(f"DEBUG: Webhook IN: Tel: {telefono_remitente}, MsgID: {whatsapp_message_id}, Type: {message_type}, Text: '{text_recibido_original[:50]}...'")
 
 
         if not telefono_remitente or not whatsapp_message_id:
@@ -627,9 +685,13 @@ async def whatsapp_webhook_handler(request: Request):
 
         if user_state == ESTADO_ESPERANDO_MAS_DETALLES:
             if message_type == "text":
-                text_recibido_mas_detalles = message_object.get("text", {}).get("body", "").strip().upper()
-                print(f"DEBUG: {telefono_remitente} en ESPERANDO_MAS_DETALLES, recibió: '{text_recibido_mas_detalles}'")
-                if text_recibido_mas_detalles == "SÍ_DETALLES" or text_recibido_mas_detalles == "SI_DETALLES":
+                print(f"DEBUG: {telefono_remitente} en ESPERANDO_MAS_DETALLES, recibió: '{text_recibido_original}'")
+
+                user_profile_dict = dict(current_user)
+                decision_ia = await analyze_with_deepseek(text_recibido_original, "decision_ver_detalles", user_profile_dict)
+                print(f"DEBUG: Decisión de IA para ver detalles ({telefono_remitente}): {decision_ia}")
+
+                if decision_ia == "QUIERE_DETALLES":
                     detalles_a_enviar = current_user["last_analysis_details"]
                     if detalles_a_enviar:
                         await send_whatsapp_message(telefono_remitente, detalles_a_enviar)
@@ -644,38 +706,47 @@ async def whatsapp_webhook_handler(request: Request):
                             new_state_after_details = ESTADO_ESPERANDO_RESPUESTA_PHISHING
                             print(f"INFO: Usuario {telefono_remitente} movido a estado ESPERANDO_RESPUESTA_PHISHING después de ver detalles.")
                         
-                        db_update_user(telefono_remitente, {"estado": new_state_after_details, "last_analysis_details": None})
+                        db_update_user(telefono_remitente, {"estado": new_state_after_details, "last_analysis_details": None}) 
                     else:
                         await send_whatsapp_message(telefono_remitente, "Parece que no tengo los detalles guardados. Por favor, envía el mensaje original de nuevo para analizarlo.")
                         db_update_user(telefono_remitente, {"estado": ESTADO_REGISTRADO, "last_analysis_details": None})
-                else:
-                    await send_whatsapp_message(telefono_remitente, f"🤔 {user_name_for_handler}, para ver el análisis detallado del mensaje anterior, por favor responde *SÍ_DETALLES*. Si quieres analizar algo nuevo o tienes otra consulta, envíamela.")
-            else: # Mensaje no textual mientras se espera SÍ_DETALLES
-                await send_whatsapp_message(telefono_remitente, f"Hola {user_name_for_handler}, estaba esperando que me dijeras *SÍ_DETALLES* en texto para darte más información. Si quieres analizar una nueva imagen o texto, envíamelo después, por favor. 👍")
+                
+                elif decision_ia == "OTRA_COSA":
+                    print(f"DEBUG: {telefono_remitente} dijo OTRA_COSA. Tratando como nueva consulta.")
+                    db_update_user(telefono_remitente, {"estado": ESTADO_REGISTRADO, "last_analysis_details": None}) 
+                    current_user_reloaded = db_get_user(telefono_remitente) 
+                    if current_user_reloaded: 
+                         await handle_registered_user_message(telefono_remitente, text_recibido_original, current_user_reloaded)
+                    else: 
+                        print(f"ERROR: No se pudo recargar el usuario {telefono_remitente} después de OTRA_COSA.")
+                        await send_whatsapp_message(telefono_remitente, "Hubo un pequeño problema, ¿podrías enviar tu consulta de nuevo, por favor?")
 
-        elif user_state == ESTADO_ESPERANDO_RESPUESTA_PHISHING:
+                else: 
+                    print(f"WARN: Respuesta no esperada de IA para decision_ver_detalles ({telefono_remitente}): {decision_ia}")
+                    await send_whatsapp_message(telefono_remitente, f"🤔 {user_name_for_handler}, no estoy seguro de cómo proceder. Si querías ver los detalles, puedes intentarlo de nuevo diciendo 'sí, quiero verlos'. Si era otra consulta, por favor envíamela de nuevo.")
+            else: 
+                await send_whatsapp_message(telefono_remitente, f"Hola {user_name_for_handler}, esperaba un mensaje de texto para saber si querías más detalles. Si es así, por favor, escribe algo como 'sí, muéstrame'. Si era otra cosa, puedes enviármelo.")
+
+        elif user_state == ESTADO_ESPERANDO_RESPUESTA_PHISHING: # Esta lógica ahora está en handle_post_phishing_response
             if message_type == "text":
-                text_recibido = message_object.get("text", {}).get("body", "").strip()
-                if text_recibido:
-                    await handle_post_phishing_response(telefono_remitente, text_recibido, current_user)
+                if text_recibido_original:
+                    await handle_post_phishing_response(telefono_remitente, text_recibido_original, current_user)
                 else:
                     await send_whatsapp_message(telefono_remitente, f"Por favor, {user_name_for_handler}, responde SÍ, NO o AYUDA a mi pregunta anterior. ¡Gracias! 😊")
             else:
                 await send_whatsapp_message(telefono_remitente, f"Hola {user_name_for_handler}, estaba esperando una respuesta de SÍ, NO o AYUDA. Si quieres analizar otra cosa, envíala después de responder, por favor. 👍")
 
-        elif user_state < ESTADO_REGISTRADO: # Onboarding (0, 1, 2, 3)
+        elif user_state < ESTADO_REGISTRADO: 
             if message_type == "text":
-                text_recibido = message_object.get("text", {}).get("body", "").strip()
-                if text_recibido:
-                    await handle_onboarding_process(telefono_remitente, text_recibido, current_user)
+                if text_recibido_original:
+                    await handle_onboarding_process(telefono_remitente, text_recibido_original, current_user)
                 else: await send_whatsapp_message(telefono_remitente, f"Hola {user_name_for_handler}, parece que no escribiste nada. Por favor, envía una respuesta para que podamos continuar. 😊")
             else: await send_whatsapp_message(telefono_remitente, f"¡Hola, {user_name_for_handler}! 😊 Para que podamos configurar tu perfil, necesito que me respondas con mensajes de texto a las preguntas anteriores. ¡Gracias!")
 
         elif user_state == ESTADO_REGISTRADO:
             if message_type == "text":
-                text_recibido = message_object.get("text", {}).get("body", "").strip()
-                if text_recibido:
-                    await handle_registered_user_message(telefono_remitente, text_recibido, current_user) # image_context será None aquí
+                if text_recibido_original:
+                    await handle_registered_user_message(telefono_remitente, text_recibido_original, current_user)
                 else: await send_whatsapp_message(telefono_remitente, f"Hola {user_name_for_handler}, ¿necesitas ayuda con algo? Puedes enviarme un mensaje que te parezca sospechoso o hacerme una pregunta sobre seguridad. ¡Estoy aquí para ti! 👍")
             elif message_type == "image":
                 image_id_wa = message_object.get("image", {}).get("id")
@@ -689,7 +760,7 @@ async def whatsapp_webhook_handler(request: Request):
         else:
             print(f"Error: Usuario {telefono_remitente} en estado desconocido: {user_state}")
             await send_whatsapp_message(telefono_remitente, f"¡Hola {user_name_for_handler}! Parece que hubo un pequeño error con mi memoria. ¿Podrías intentar enviarme tu mensaje de nuevo? Gracias. 😊")
-            db_update_user(telefono_remitente, {"estado": ESTADO_REGISTRADO}) # Reset a un estado conocido
+            db_update_user(telefono_remitente, {"estado": ESTADO_REGISTRADO})
 
     return JSONResponse(content={}, status_code=200)
 
