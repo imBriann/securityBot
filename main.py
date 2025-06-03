@@ -13,6 +13,7 @@ from PIL import Image
 import pytesseract
 from dotenv import load_dotenv 
 from datetime import datetime
+import datetime  # Ensure this is at the top of the file
 
 load_dotenv()
 
@@ -347,41 +348,47 @@ async def download_image_from_whatsapp(media_id: str) -> bytes | None:
     except Exception as e: print(f"Error inesperado en download_image_from_whatsapp (media_id: {media_id}): {e}")
     return None
 
-async def process_incoming_image_task(telefono: str, user_data: sqlite3.Row, image_id: str):
-    user_name = user_data["nombre"] if user_data and user_data["nombre"] else "tú"
-    print(f"Iniciando tarea de procesamiento de imagen para {telefono} ({user_name}), image_id: {image_id}")
-    
-    image_bytes = await download_image_from_whatsapp(image_id)
+async def process_incoming_image_task(telefono: str, user_data: sqlite3.Row, image_id_whatsapp: str):
+    user_name_for_ocr_task = user_data["nombre"] if user_data and user_data["nombre"] else "tú"
+    print(f"Iniciando tarea de procesamiento de imagen para {telefono} ({user_name_for_ocr_task}), image_id_whatsapp: {image_id_whatsapp}")
+
+    image_bytes = await download_image_from_whatsapp(image_id_whatsapp)
     if not image_bytes:
-        await send_whatsapp_message(telefono, f"⚠️ Lo siento, {user_name}, no pude descargar la imagen que enviaste. ¿Podrías intentar enviarla de nuevo o verificar que sea válida? Por favor.")
+        await send_whatsapp_message(telefono, f"⚠️ Lo siento, {user_name_for_ocr_task}, no pude descargar la imagen que enviaste. ¿Podrías intentar enviarla de nuevo o verificar que sea válida? Por favor.")
         return
 
     try:
-        unique_filename = f"{telefono}_{uuid.uuid4().hex[:8]}.jpg"
-        image_path = os.path.join(IMAGES_DIR, unique_filename)
-        
+        image_file_name_for_db = f"{telefono}_{uuid.uuid4().hex[:8]}.jpg"
+        image_path = os.path.join(IMAGES_DIR, image_file_name_for_db)
+
         def save_and_ocr_sync(path, data_bytes):
             with open(path, "wb") as f: f.write(data_bytes)
             img_pil = Image.open(BytesIO(data_bytes))
             return pytesseract.image_to_string(img_pil, lang="spa+eng").strip()
 
         text_ocr = await asyncio.to_thread(save_and_ocr_sync, image_path, image_bytes)
-        db_save_image_record(telefono, unique_filename)
 
         if not text_ocr:
-            await send_whatsapp_message(telefono, f"🤔 {user_name}, no pude encontrar texto legible en la imagen. Para que pueda ayudarte mejor, asegúrate de que la imagen sea clara y el texto no sea muy pequeño o esté borroso. ¡Gracias!")
+            await send_whatsapp_message(telefono, f"🤔 {user_name_for_ocr_task}, no pude encontrar texto legible en la imagen. Para que pueda ayudarte mejor, asegúrate de que la imagen sea clara y el texto no sea muy pequeño o esté borroso. ¡Gracias!")
             return
-        
-        text_for_analysis = f"(El siguiente texto fue extraído de una imagen que me envió {user_name}. El OCR podría tener errores, por favor intenta entender el contexto original):\n---\n{text_ocr}\n---"
-        await handle_registered_user_message(telefono, text_for_analysis, user_data, image_context_info={"filename": unique_filename, "timestamp": datetime.now().isoformat()})
-        print(f"Tarea de procesamiento de imagen para {telefono} ({user_name}) completada.")
+
+        text_for_analysis = f"(El siguiente texto fue extraído de una imagen que me envió {user_name_for_ocr_task}. El OCR podría tener errores, por favor intenta entender el contexto original):\n---\n{text_ocr}\n---"
+
+        image_context_for_handler = {
+            "is_from_image_processing": True,
+            "ocr_text_original": text_ocr,
+            "image_db_id": image_file_name_for_db
+        }
+        await handle_registered_user_message(telefono, text_for_analysis, user_data, image_context=image_context_for_handler)
+
+        print(f"Tarea de procesamiento de imagen para {telefono} ({user_name_for_ocr_task}) completada.")
 
     except pytesseract.TesseractNotFoundError:
         print("ERROR CRÍTICO: Tesseract OCR no está instalado o no en PATH.")
-        await send_whatsapp_message(telefono, f"⚠️ ¡Uy, {user_name}! Parece que tengo un problema técnico con mi sistema para leer imágenes en este momento. Lamento no poder analizarla esta vez. Puedes intentarlo más tarde o enviarme el texto directamente si es posible.")
+        await send_whatsapp_message(telefono, f"⚠️ ¡Uy, {user_name_for_ocr_task}! Parece que tengo un problema técnico con mi sistema para leer imágenes en este momento. Lamento no poder analizarla esta vez. Puedes intentarlo más tarde o enviarme el texto directamente si es posible.")
     except Exception as e:
-        print(f"Error en process_incoming_image_task (tel: {telefono}, user: {user_name}): {e}")
-        await send_whatsapp_message(telefono, f"⚠️ Lo siento mucho, {user_name}, ocurrió un error inesperado mientras procesaba tu imagen. Ya estoy enterado del problema. Por favor, intenta más tarde. 🙏")
+        print(f"Error en process_incoming_image_task (tel: {telefono}, user: {user_name_for_ocr_task}): {e}")
+        await send_whatsapp_message(telefono, f"⚠️ Lo siento mucho, {user_name_for_ocr_task}, ocurrió un error inesperado mientras procesaba tu imagen. Ya estoy enterado del problema. Por favor, intenta más tarde. 🙏")
 
 async def handle_onboarding_process(telefono: str, text_received: str, user_data: sqlite3.Row):
     estado_actual = user_data["estado"]
@@ -463,7 +470,7 @@ async def handle_post_phishing_response(telefono: str, text_received: str, user_
         await send_whatsapp_message(telefono, f"🤔 {nombre_usuario}, no estoy seguro de haber entendido tu respuesta. A mi pregunta anterior sobre si interactuaste con el mensaje, por favor responde con *SÍ*, *NO*, o escribe *AYUDA* si necesitas los pasos a seguir. ¡Gracias!")
         # Mantenemos el estado ESTADO_ESPERANDO_RESPUESTA_PHISHING
 
-async def handle_registered_user_message(telefono: str, text_received: str, user_data: sqlite3.Row, image_context_info=None):
+async def handle_registered_user_message(telefono: str, text_received: str, user_data: sqlite3.Row, image_context: dict = None):
     cleaned_text = re.sub(r'\s+', ' ', text_received).strip()
     if not cleaned_text: 
         user_name_empty_msg = user_data["nombre"] if user_data and user_data["nombre"] else "Hola"
@@ -474,9 +481,7 @@ async def handle_registered_user_message(telefono: str, text_received: str, user
     intencion = await analyze_with_deepseek(cleaned_text, "intencion", user_profile_dict)
     nombre_usuario = user_data["nombre"] if user_data and user_data["nombre"] else "tú"
 
-    if intencion == "saludo":
-        await send_whatsapp_message(telefono, f"¡Hola de nuevo, {nombre_usuario}! 👋 ¿En qué te puedo ayudar hoy? 😊")
-    elif intencion == "analizar":
+    if intencion == "analizar":
         await send_whatsapp_message(telefono, f"🔍 ¡Entendido, {nombre_usuario}! Estoy revisando el mensaje que me enviaste. Te aviso en un momento con mi análisis... 👍")
         analisis_phishing_completo = await analyze_with_deepseek(cleaned_text, "phishing", user_profile_dict)
 
@@ -491,15 +496,17 @@ async def handle_registered_user_message(telefono: str, text_received: str, user
                 "estado": ESTADO_ESPERANDO_MAS_DETALLES,
                 "last_analysis_details": detalles_completos
             }
-            if image_context_info:
-                db_updates["last_image_id_processed"] = image_context_info["filename"]
-                db_updates["last_image_timestamp"] = image_context_info["timestamp"]
-                db_updates["last_image_ocr_text"] = cleaned_text
+            if image_context and image_context.get("is_from_image_processing"):
+                db_updates["last_image_ocr_text"] = image_context.get("ocr_text_original")
                 db_updates["last_image_analysis_raw"] = analisis_phishing_completo
+                db_updates["last_image_id_processed"] = image_context.get("image_db_id")
+                db_updates["last_image_timestamp"] = datetime.datetime.now().isoformat()
 
             db_update_user(telefono, db_updates)
         else:
             await send_whatsapp_message(telefono, f"Lo siento mucho, {nombre_usuario}, tuve un problema al intentar analizar tu mensaje. ¿Podrías intentarlo de nuevo un poco más tarde, por favor? 🙏")
+    elif intencion == "saludo":
+        await send_whatsapp_message(telefono, f"¡Hola de nuevo, {nombre_usuario}! 👋 ¿En qué te puedo ayudar hoy? 😊")
     elif intencion == "consulta_imagen_anterior":
         ocr_guardado = user_data.get("last_image_ocr_text")
         analisis_raw_guardado = user_data.get("last_image_analysis_raw")
@@ -605,8 +612,8 @@ async def whatsapp_webhook_handler(request: Request):
         
         elif user_state == ESTADO_ESPERANDO_MAS_DETALLES:
             if message_type == "text":
-                text_recibido = message_object.get("text", {}).get("body", "").strip().upper()
-                if text_recibido == "SÍ_DETALLES" or text_recibido == "SI_DETALLES":
+                text_recibido_mas_detalles = message_object.get("text", {}).get("body", "").strip().upper()
+                if text_recibido_mas_detalles == "SÍ_DETALLES" or text_recibido_mas_detalles == "SI_DETALLES":
                     detalles_a_enviar = current_user["last_analysis_details"]
                     if detalles_a_enviar:
                         await send_whatsapp_message(telefono_remitente, detalles_a_enviar)
